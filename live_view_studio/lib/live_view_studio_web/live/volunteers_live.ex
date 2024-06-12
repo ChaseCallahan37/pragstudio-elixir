@@ -3,21 +3,20 @@ defmodule LiveViewStudioWeb.VolunteersLive do
 
   alias LiveViewStudio.Volunteers
   alias LiveViewStudio.Volunteers.Volunteer
+  alias LiveViewStudioWeb.VolunteerFormComponent
 
   def mount(_params, _session, socket) do
+    if connected?(socket) do
+      Volunteers.subscribe()
+    end
     volunteers = Volunteers.list_volunteers()
-
-    changeset = Volunteers.change_volunteer(%Volunteer{})
-    form = to_form(changeset)
 
     socket =
       socket
       |> stream(
         :volunteers, volunteers
       )
-      |> assign(
-        form: form
-      )
+      |> assign(count: length(volunteers))
 
       IO.inspect(socket.assigns.streams.volunteers, label: "mount")
 
@@ -28,30 +27,19 @@ defmodule LiveViewStudioWeb.VolunteersLive do
     ~H"""
     <h1>Volunteer Check-In</h1>
     <div id="volunteer-checkin">
-     <.volunteer_form for={@form} />
+     <.live_component module={VolunteerFormComponent} id={:new} count={@count} />
       <pre>
       </pre>
       <div id="volunteers" phx-update="stream">
-        <.volunteer :for={{volunteer_id, volunteer} <- @streams.volunteer}  volunteer={volunteer} volunteer_id={volunteer_id}/>
+        <.volunteer :for={{volunteer_id, volunteer} <- @streams.volunteers}  volunteer={volunteer} volunteer_id={volunteer_id}/>
       </div>
     </div>
-    """
-  end
-
-  def volunteer_form(assigns) do
-    ~H"""
-    <.form for={@form} phx-submit="save" phx-change="validate">
-      <.input field={@form[:name]} placeholder="Name" autocomplete="off" phx-debounce="2000"/>
-      <.input field={@form[:phone]} placeholder="Phone" type="tel" autocomplete="off" phx-debounce="blur"/>
-      <.button phx-disable-with="Saving...">Check In</.button>
-    </.form>
     """
   end
 
   def volunteer(assigns) do
     ~H"""
     <div
-
         class={"volunteer #{if @volunteer.checked_out, do: "out"}"}
         id={@volunteer_id}
       >
@@ -71,42 +59,17 @@ defmodule LiveViewStudioWeb.VolunteersLive do
           <.icon name="hero-trash-solid" />
         </.link>
       </div>
-
-
     """
   end
-  def handle_event("save", %{"volunteer" => volunteer_params}, socket) do
-    case Volunteers.create_volunteer(volunteer_params) do
-      {:ok, volunteer} ->
-        socket = stream_insert(socket, :volunteers, volunteer, at: 0)
-        IO.inspect(socket.assigns.streams.volunteers, label: "save")
-        changeset = Volunteers.change_volunteer(%Volunteer{})
 
-        socket = put_flash(socket, :info, "Succesfully Added")
-        {:noreply, assign(socket, form: to_form(changeset))}
-      {:error, changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset))}
-    end
 
-  end
 
   def handle_event("toggle-status", %{"id" => id}, socket) do
     volunteer = Volunteers.get_volunteer!(id)
-    {:ok, volunteer} = Volunteers.update_volunteer(volunteer, %{checked_out: !volunteer.checked_out})
-    socket = stream_insert(socket, :volunteers, volunteer)
+    {:ok, _volunteer} = Volunteers.update_volunteer(volunteer, %{checked_out: !volunteer.checked_out})
     {:noreply, socket}
   end
 
-  def handle_event("validate", %{"volunteer" => volunteer_params}, socket) do
-
-    IO.inspect(socket.assigns.streams.volunteers, label: "Validate")
-
-    changeset = %Volunteer{}
-    |> Volunteers.change_volunteer(volunteer_params)
-    |> Map.put(:action, :validate)
-
-    {:noreply, assign(socket, form: to_form(changeset))}
-  end
 
   def handle_event("delete", %{"id" => id}, socket) do
     {:ok, volunteer} = Volunteers.get_volunteer!(id)
@@ -116,4 +79,18 @@ defmodule LiveViewStudioWeb.VolunteersLive do
     socket = put_flash(socket, :info, "Volunteer #{volunteer.name} Succesfully deleted")
     {:noreply, socket}
   end
+
+  def handle_info({:volunteer_created, volunteer}, socket) do
+      socket = stream_insert(socket, :volunteers, volunteer, at: 0)
+      socket = update(socket, :count, &(&1 + 1))
+
+      {:noreply, socket}
+  end
+
+  def handle_info({:volunteer_updated, volunteer}, socket) do
+    socket = stream_insert(socket, :volunteers, volunteer)
+
+    {:noreply, socket}
+  end
+
 end

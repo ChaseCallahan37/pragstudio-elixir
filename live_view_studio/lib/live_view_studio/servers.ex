@@ -50,10 +50,13 @@ defmodule LiveViewStudio.Servers do
 
   """
   def create_server(attrs \\ %{}) do
-    IO.inspect(attrs)
+    IO.inspect("LOOKY HERE22")
     %Server{}
+    |> IO.inspect()
     |> Server.changeset(attrs)
+    |> IO.inspect()
     |> Repo.insert()
+    |> IO.inspect()
   end
 
   @doc """

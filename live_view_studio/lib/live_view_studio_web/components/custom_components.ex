@@ -54,5 +54,4 @@ defmodule LiveViewStudioWeb.CustomComponents do
       <div :if={@loading} class="loader">Loading...</div>
     """
   end
-
 end
